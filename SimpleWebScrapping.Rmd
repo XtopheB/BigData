@@ -1,9 +1,17 @@
 ---
-title: "A first WebScrapping"
-subtitle: " Simple version with rvest"
-author: "Christophe Bontemps"
+title: "A First Web Scraping Exercise"
+subtitle: ' Simple version with rvest'
+author: "Christophe Bontemps (SIAP)"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  html_document:
+    toc: yes
+    toc_float: true
+    code_folding: hide
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -11,7 +19,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-```{r}
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
 library(rvest)
 library(dplyr)
 library(kableExtra)
@@ -20,9 +29,9 @@ library(xml2)
 
 # Feasability and legality of the approach
 
-We first decide on the website to scrap, in our case a shop in NZ. We will limit ourselves to the **bathroom** items. 
+We first decide on the website to scrap, in our case a shop in NZ. We will limit ourselves to the a single subpage. 
 
-```{r}
+```{r }
 # Define the URL of the website
 mainurl <- "https://www.theaxe.co.nz/collections/"
 
@@ -31,19 +40,17 @@ subpage <- "bathroom" # Also standard-pillowcases
 
 # The URL to scrap is finally:
 url <- paste0(mainurl, subpage)
-
 ```
 
-We want to web scrap pages from  the website `r mainurl` to get some prices of products. It can be good to have a look and see whether there is a `robot.tx` file with some restrictions. 
+We want to web scrap pages from  the website `r mainurl` to get some prices of products. It can be good to have a look and see whether there is a  `robot.tx`  file with some restrictions. 
 
 > Here there is no restriction and no *robot.txt* 
 
-Here we restrict ourselves to a subpage on `r subpage` , so the page of interest is finally `r url` 
+Here we restrict ourselves to a subpage on the category  "**`r subpage`**" , so the page of interest is finally `r url`. We may manually count the number of products displayed there to compare with our final list. 
 
 ## Step 1: Read the web page 
 
- We can use `read_html()`  a function from `rvest`package that reads a webpage content. The object we have downloaded is quite complex, but will serve us to identify the elements we need.
-
+ We can use `read_html()`,  a function from `rvest`package that reads a webpage content. The object we have downloaded is quite complex, but will serve us to identify the elements we need.
 
  
 ```{r}
@@ -51,13 +58,13 @@ Here we restrict ourselves to a subpage on `r subpage` , so the page of interest
 page <- read_html(url)
 ```
 
-The page itself is a complex object in Html, and is not easy to read for a human, but machines can do that and identify elements such as **nodes** and from there links to subpages "<a href "
+The page itself is a complex object in html, and is not easy to read for a human, but machines can do that and identify elements such as **nodes** and from there links to subpages  and tags such as $<a \; href>$
 
 Here is an excerpt of the page downloaded: 
 
-```{r}
+```{r }
 # Print the first 100 characters of the page content
-cat(substr(as.character(page), 1, 100))
+print(substr(as.character(page), 1, 300))
 ```
 
 ##  Step 2: Search information within the page
@@ -65,7 +72,8 @@ The  structure of a `page` is  similar to a tree. Understanding the page object 
 
 ```{r}
 links <- page %>% html_nodes("a") %>% html_attr("href")
-links_df <- as.data.frame(links)
+links_df <- as.data.frame(links)%>%
+  filter(links !="" & links != "/" & links !="#")
 
 ```
 
@@ -99,7 +107,7 @@ For each product we need to find where important information is located.  We sea
 - The product name
 - the product price
 
-We also need to pay attention to empty fields 
+We also need to pay attention to empty fields, and identify which node of the structure of the web page provides the information.  
 
 ```{r}
 # Loop through the product listings and extract the data
@@ -138,7 +146,11 @@ df <- data.frame(
 kable(df)
 ```
 
-# Step5: Save the results 
+# Step 5: Save the results 
+
+The results are saved as a csv file, with a name depending on the subpage scrapped. here we focused on `r subpage`. 
+
+> Would you be able to webscrap another category using this document? (hint: there are other subpages )
 
 ```{r}
 # Save the DataFrame to a CSV file
