@@ -4,12 +4,12 @@ author: "Your Name (Your Institution)"
 subtitle: '*A simple report*'
 date: "`r Sys.Date()`"
 output:
-  pdf_document:
-    toc: yes
   html_document:
     toc: yes
     toc_float: true
     code_folding: hide
+  pdf_document:
+    toc: yes
   word_document:
     toc: yes
 ---
@@ -42,7 +42,7 @@ We provide here some basic elements about the data set and descriptive statistic
 * First we load the data
 * second we print a summary
 
-```{r}
+```{r echo =FALSE}
 TradeData <- read.csv("https://www.unsiap.or.jp/on_line/2024/RAP/Data/TradeData.csv")
 ```
 

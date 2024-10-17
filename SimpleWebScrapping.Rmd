@@ -1,0 +1,150 @@
+---
+title: "A first WebScrapping"
+subtitle: " Simple version with rvest"
+author: "Christophe Bontemps"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(rvest)
+library(dplyr)
+library(kableExtra)
+library(xml2)
+```
+
+# Feasability and legality of the approach
+
+We first decide on the website to scrap, in our case a shop in NZ. We will limit ourselves to the **bathroom** items. 
+
+```{r}
+# Define the URL of the website
+mainurl <- "https://www.theaxe.co.nz/collections/"
+
+# Subcategory 
+subpage <- "bathroom" # Also standard-pillowcases
+
+# The URL to scrap is finally:
+url <- paste0(mainurl, subpage)
+
+```
+
+We want to web scrap pages from  the website `r mainurl` to get some prices of products. It can be good to have a look and see whether there is a `robot.tx` file with some restrictions. 
+
+> Here there is no restriction and no *robot.txt* 
+
+Here we restrict ourselves to a subpage on `r subpage` , so the page of interest is finally `r url` 
+
+## Step 1: Read the web page 
+
+ We can use `read_html()`  a function from `rvest`package that reads a webpage content. The object we have downloaded is quite complex, but will serve us to identify the elements we need.
+
+
+ 
+```{r}
+# Send a GET request to the URL and read the HTML content
+page <- read_html(url)
+```
+
+The page itself is a complex object in Html, and is not easy to read for a human, but machines can do that and identify elements such as **nodes** and from there links to subpages "<a href "
+
+Here is an excerpt of the page downloaded: 
+
+```{r}
+# Print the first 100 characters of the page content
+cat(substr(as.character(page), 1, 100))
+```
+
+##  Step 2: Search information within the page
+The  structure of a `page` is  similar to a tree. Understanding the page object is essential for effective web scraping in R. So let's explore and search for all the links `href` in this page.
+
+```{r}
+links <- page %>% html_nodes("a") %>% html_attr("href")
+links_df <- as.data.frame(links)
+
+```
+
+Here, we have identify `r nrow(links_df)` different links, here is a list of the first 10. We see that we are close to what we want! 
+
+```{r}
+kable(links_df[1:10,])
+```
+
+
+## Step 3: Examine (again) the web page
+
+This is the tricky part, we need to identify where is the relevant information, that is the product list. From the inspection of the web page (we use the *inspect* feature of the browser), we know that the list of products is in the `div.figcaption.under.text-center`. Let us retrieve that list.  
+
+```{r}
+# Find the product listings
+products_list <- page %>% html_nodes("div.figcaption.under.text-center")
+```
+
+We have a list of nodes that each correspond to a product. In total, we have  `r length(products_list)`  products. We will loop on that list and extract the information we want or each product.  
+
+```{r}
+# Create empty vectors to store the data
+product_titles <- c()
+product_prices <- c()
+```
+
+# Step 4: Loop over all products
+For each product we need to find where important information is located.  We search primary for 
+
+- The product name
+- the product price
+
+We also need to pay attention to empty fields 
+
+```{r}
+# Loop through the product listings and extract the data
+for (product in products_list) {
+  # Extract product title
+  title_tag <- product %>% html_node("p.h5--accent.strong.name_wrapper")
+  # Extract price
+  price_tag <- product %>% html_node("span.price")
+  
+  # Get title or set to "N/A" if not found
+  title <- if (!is.null(title_tag)) html_text(title_tag) %>% trimws() else "N/A"
+  
+  # Get price or set to "N/A" if not found
+  price <- if (!is.null(price_tag)) html_text(price_tag) %>% trimws() else "N/A"
+  
+  # To visualize the products in the loop, uncomment line below
+  # print(paste("Product", title))
+  
+  # Append to vectors
+  product_titles <- c(product_titles, title)
+  product_prices <- c(product_prices, price)
+}
+```
+
+# Step 5: Analyse the results
+Now that we have looped over all products and captured the relavnt information, we can compile this information in a data frame and visualize the results. 
+
+```{r}
+# Create a data frame from the vectors
+df <- data.frame(
+  "Product Name" = product_titles,
+  "Product Price" = product_prices,
+  stringsAsFactors = FALSE
+)
+
+kable(df)
+```
+
+# Step5: Save the results 
+
+```{r}
+# Save the DataFrame to a CSV file
+write.csv(df, paste0("Data/price_", subpage,".csv"), row.names = FALSE)
+cat("Data has been written to", paste0("Data/price_", subpage,".csv"))
+
+
+```
+
