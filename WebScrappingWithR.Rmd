@@ -1,0 +1,267 @@
+---
+title: "Web Scraping with R and Selenium"
+subtitle: "A demo with R Selenium"
+author: "Christophe Bontemps (SIAP)"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    code_folding: show
+    highlight: tango
+    number_sections: yes
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# How to web scrap a website 
+
+```{r}
+# Set URL
+url <- "https://www.globalproductprices.com/"
+```
+
+We want to web scrap the  the website `r url` to get some prices of products like sugar, rice, etc. 
+
+# Ethic Issue on Web Scraping: Being polite and identify ourself
+
+> We need to know whether we have the permission to web scrap the website, and for that we check the file **robot.txt** or see if there are some explicit policies for web scrapping. 
+
+
+## Create a user profile in Firefox 
+> This is a bit tricky, but can be done once and for all
+
+### Open Firefox
+
+- Type `about:profiles` in the URL bar.
+Click the Create a New Profile button. Follow the prompts to name the profile and choose the folder location.
+Once the profile is created, 
+- start Firefox with this profile.
+Type `about:config` in the URL bar and proceed with caution.
+- Search for `general.useragent.override`.
+For instance, you might use a User-Agent string like `MyProfile`. If it's not, create a new string preference with the name general.useragent.override and value of your new User-Agent string. 
+
+Now, when you run RSelenium, use this profile, and you should be able to identify yourself. !Please note that this may cause certain problems by certain website!
+
+Here is an example. PLEASE DO NOT RUN IT as it is a example without modification. 
+
+
+```{r eval=FALSE, include=FALSE}
+############################ EXAMPLE DO NOT RUN ############################ 
+#  The profile I have defined is there (change path to yours)
+My_firefox_profile <- getFirefoxProfile("C:\Users\cbontemps\AppData\Roaming\Mozilla\Firefox\Profiles\") 
+
+# Start Selenium session with your profile to identify yourself
+
+driver <- rsDriver(
+  browser = "firefox", 
+  port = 1234L,        
+  verbose = FALSE, 
+  extraCapabilities = list(firefox_profile = My_firefox_profile)
+)
+
+############################ EXAMPLE DO NOT RUN ############################ 
+```
+
+# Web scrapping with Selenium
+
+`Selenium` is a powerful tool used for web scraping, testing web applications, and automating repetitive browser tasks. Selenium allows you to interact with web elements like buttons, forms, and links just as a human user would. 
+
+R will start a *Selenium session*  on a specific browser (here Firefox). You must have Selenium installed on this browser before being able to run this code. 
+
+> Important : Change the port number for each session (blocked by previous launch ), or restart R session
+
+```{r}
+library(RSelenium)
+library(rvest)
+
+
+# Important note: Change the port number for each session (blocked by previous launch )
+# Start a Selenium firefox browser
+driver <-rsDriver(browser = "firefox",   #20017L, <- for Mac
+                   port = 4447L,         # 4445L, 4447 also works 
+                   verbose = FALSE,
+                   chromever = NULL)
+
+# extract the client for readability of the code to follow
+remote_driver <- driver[["client"]]
+
+
+Sys.sleep(1)
+# Navigate to the webpage
+remote_driver$navigate(url)
+
+Sys.sleep(1)
+# Maximize window size
+remote_driver$maxWindowSize()
+
+Sys.sleep(1)
+# Navigate into different headers categories, such as "Countries"
+countries <- remote_driver$findElement(using = 'link text', 'Countries')
+countries$clickElement()
+
+Sys.sleep(1)
+# Go back to last Page
+remote_driver$goBack()
+
+
+Sys.sleep(1)
+# Navigate into different headers categories, such as "Product List"
+productlist <- remote_driver$findElement(using = 'link text', 'Product list')
+productlist$clickElement()
+
+
+Sys.sleep(1)
+# Navigate into a specific food, such as "rice"
+# Be careful to select the right text here " Rice prices, 1kg" 
+
+rice <- remote_driver$findElement(using = 'link text', 'Rice prices, 1 kg')
+rice$clickElement()
+
+
+#Save the table for rice prices
+rice_price <- remote_driver$getPageSource()[[1]] %>% 
+  read_html() %>%
+  html_table()
+
+
+Sys.sleep(1)
+# Go back to last Page
+remote_driver$goBack()
+
+# Another product
+
+Sys.sleep(1)
+# Navigate into a specific food, such as "Sugar"
+sugar <- remote_driver$findElement(using = 'link text', 'Sugar prices, 1 kg')
+sugar$clickElement()
+
+
+#Save the table for sugar price
+sugar_price <- remote_driver$getPageSource()[[1]] %>% 
+  read_html() %>%
+  html_table()
+```
+
+Now the data have been collected, we can just analyse the prices. 
+
+# Data Analysis with the collected data
+
+We can check if the data is coherent with what is on the web site; 
+
+###  Rice prices
+
+```{r}
+library(countrycode)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+#The original rice_price is a tibble which has another tibble nested inside. The inside tibble is what we need. So we use [[1]] to take it out
+rice_price_df <- rice_price[[1]]    
+
+```
+
+
+# Rice price per country
+```{r}
+rice_price_df %>% 
+  ggplot()+
+  aes(x = reorder(Countries, -Rank ), y = (`Rice prices, 1 kg`)) +
+   geom_bar(stat = "identity", 
+             fill= "lightsteelblue1") +
+  labs(title ="Average Rice price per country ", 
+       subtitle = "", 
+       caption  = paste("Source:", url," (file date: ",Sys.Date(), ")"), 
+       x= "Contries",
+       y = "Average price (USD)") +
+  coord_flip() +
+  theme_minimal()
+```
+# Detailled by country and continent: 
+
+```{r}
+
+# Enriching the file with continent for each country 
+rice_price_df$continent <- countrycode(rice_price_df$Countries, 
+                                       origin = "country.name", 
+                                       destination = "continent")
+
+# Calculate the mean rice price per continent:
+rice_price_cont <- rice_price_df %>%
+  group_by(continent) %>%
+  summarise(avg_rice_price = mean(`Rice prices, 1 kg`, na.rm = TRUE))
+
+
+rice_price_cont %>% 
+  filter(!is.na(continent)) %>%
+  ggplot()+
+  aes(x = reorder(continent, avg_rice_price), y = (avg_rice_price)) +
+   geom_bar(stat = "identity", 
+             fill= "lightblue") +
+  labs(title ="Average Rice price per continent ", 
+       subtitle = "", 
+       caption  = paste("Source:", url," (file date: ",Sys.Date(), ")"), 
+       x= "Continents",
+       y = "Average price ($)") +
+  coord_flip() +
+  theme_minimal()
+
+```
+```{r}
+
+rice_price_df %>% 
+  filter(!is.na(continent)) %>%
+  ggplot() +
+   aes(x = reorder(Countries, `Rice prices, 1 kg`), 
+       y = `Rice prices, 1 kg`) + 
+    facet_wrap(~continent, ncol = 2, scales = "free_y") +
+    geom_bar(stat = "identity", 
+             fill= "lightblue") +
+  labs(title ="Average Rice price per continent ", 
+       subtitle = "", 
+       caption  = paste("Source:", url," (file date: ",Sys.Date(), ")"), 
+       x= "Continents",
+       y = "Average price ($)") +
+  coord_flip() +
+  theme_minimal() 
+ 
+
+  
+```
+
+## Sugar prices
+
+```{r}
+sugar_price_df <- sugar_price[[1]]
+
+sugar_price_df$continent <- countrycode(sugar_price_df$Countries, 
+                                       origin = "country.name", 
+                                       destination = "continent")
+
+# Calculate the mean rice price per continent:
+sugar_price_cont <- sugar_price_df %>%
+  group_by(continent) %>%
+  summarise(avg_sugar_price = mean(`Sugar prices, 1 kg`, na.rm = TRUE))
+
+# plot
+sugar_price_cont %>%
+  filter(!is.na(continent)) %>%
+  ggplot() +
+  aes(x = reorder(continent, avg_sugar_price), y = (avg_sugar_price)) +
+   geom_bar(stat = "identity", 
+             fill= "pink") +
+  labs(title ="Average Sugar price per continent ", 
+       subtitle = "", 
+       caption  = paste("Source:", url," (file date: ",Sys.Date(), ")"), 
+       x= "Continents",
+       y = "Average price ($)") +
+  coord_flip() +
+  theme_minimal()
+
+
+```
