@@ -4,12 +4,12 @@ subtitle: ' Simple version with rvest'
 author: "Christophe Bontemps (SIAP)"
 date: "`r Sys.Date()`"
 output:
+  pdf_document:
+    toc: yes
   html_document:
     toc: yes
     toc_float: true
     code_folding: hide
-  pdf_document:
-    toc: yes
   word_document:
     toc: yes
 ---
@@ -20,7 +20,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 
-```{r message=FALSE, warning=FALSE, include=FALSE}
+```{r warning=FALSE, include=FALSE}
 library(rvest)
 library(dplyr)
 library(kableExtra)
@@ -42,9 +42,9 @@ subpage <- "bathroom" # Also standard-pillowcases
 url <- paste0(mainurl, subpage)
 ```
 
-We want to web scrap pages from  the website `r mainurl` to get some prices of products. It can be good to have a look and see whether there is a  `robot.tx`  file with some restrictions. 
+We want to web scrap pages from  the website **`r mainurl`** to get some prices of products. It can be good to have a look and see whether there is a  *`robots.txt`*  file with some restrictions. 
 
-> Here there is no restriction and no *robot.txt* 
+> Here there is no restriction and no *robots.txt* 
 
 Here we restrict ourselves to a subpage on the category  "**`r subpage`**" , so the page of interest is finally `r url`. We may manually count the number of products displayed there to compare with our final list. 
 
