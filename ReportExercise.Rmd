@@ -4,14 +4,14 @@ author: "Your Name (Your Institution)"
 subtitle: '*A simple report*'
 date: "`r Sys.Date()`"
 output:
+  word_document:
+    toc: no
+  pdf_document:
+    toc: yes
   html_document:
     toc: yes
     toc_float: true
     code_folding: hide
-  pdf_document:
-    toc: yes
-  word_document:
-    toc: yes
 ---
 
 
@@ -31,7 +31,7 @@ library(flextable)
 ```{r setup, include=FALSE}
 # Set echo=FALSE as default for code cells
 # The code folding for HTLM output is thus deactivated
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
 
 ```
 
@@ -73,6 +73,10 @@ unique(TradeData$Principle_Exports)
 ```
 
 # Main Exports by type of goods
+```{r}
+summary(TradeData)
+```
+
 
 ## As a table
 It could be nicer to have this as a table:
@@ -131,7 +135,7 @@ ExportsByType  %>%
 The previous analysis was done for all years. Imagine now the same report but for any year in [2000, 2010]. let's pick a year in the code chunck below! 
 
 ```{r}
-MyYear <- 2003
+MyYear <- 2004
 ```
 
 > we have now selected the year **`r MyYear`**, let's see the ***new*** report!
