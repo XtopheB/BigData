@@ -1,0 +1,229 @@
+---
+title: "What is an API? And how do I work with it in R?"
+subtitle: "Data gathering on WHO website"
+author: "Christophe Bontemps and Patrick Jonsson  (SIAP)"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    code_folding: show
+    highlight: tango
+    number_sections: yes
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set( message = FALSE, warning = FALSE, 
+                       results =FALSE, echo = TRUE,
+                       fig.width=7, fig.height=4, 
+                       dev="png", 
+                       dev.args=list(type="cairo"), dpi=96)
+
+```
+
+
+
+```{r packages}
+library(knitr)
+library(forcats)
+library(tidyverse)
+library(ggplot2)
+library(httr)
+library(jsonlite)
+```
+
+# What is an API? 
+The API can be seen as a messenger. It will take a request that you make and relay it to a system. This system will then process your request and return the response back to you. A practical example of an API could be your waiter at your next restaurant visit. Your waiter will take your menu order and deliver it to the kitchen, here your order will be prepared and the waiter returns the food to you.  
+
+Often times the API you want to use requires you to have an authentication to be able to send requests do the API. Typically this will require some sort of registration at the company/organization or whatever service you wish to scrape data from. Registering for their service will provide you with a username and a password/token that you use to authenticate that you are indeed the one requesting their data. An important thing to note here is that you often undertake legal responsibility for how you use their API service, and in most cases you are not free to use their data freely, especially so if your intent of use is commercial.
+
+> So *__before__* you start requesting data from a service always look up what type of legal obligations you are undertaking by using their service.  
+
+# How does it work?
+## Example with WHO website API
+
+if we go to [WHO website](https://www.who.int/data/gho/data/themes/mortality-and-global-health-estimates), we can query for some data through the [**DATA API/Athena API**](https://www.who.int/data/gho/info/athena-api)  
+
+We use the Athena API, a URL specification request will in general look like:
+
+    #http://HOST[:PORT]/PATH/athena/INSTANCE/[DIMENSION[/CODE[,CODE2[,CODEn]][.EXTENSION][?QUERY_PARAMETERS]]]
+
+So if we want to retrieve data for Life Botswana Life expectancy at birth from year 2011 this query would look like:
+
+    #http://apps.who.int/gho/athena/api/GHO/WHOSIS_000001?filter=COUNTRY:BWA;YEAR:2011;SEX:BTSX 
+    
+From the URL above:
+
+- **WHOSIS_000001** is the target we use to request the data regarding Life expectancy at birth. 
+-  We then filter by country with **BWA** as the country code for Botswana, and
+- further filter on the **year** 2011. 
+
+The list of possible indicators can be found here:
+
+https://apps.who.int/gho/data/node.imr
+
+These will be specific for each website. By choosing one specific indicator we can find what target we need to request the data in R. A practical example; Alcohol, abstainers lifetime (%) (Global Information System on Alcohol and Health) which is the very first indicator at the top of the list at the aforementioned website, when we click this link we get that this data has the following URL:
+
+https://apps.who.int/gho/data/node.imr.SA_0000001409?lang=en
+
+The specific target then to request this data from the WHO API will be SA_0000001409. So as we saw in the general Athena API URL specification there is a format for how the URL later on will look when we want to request specific data. Some of these things such as [:PORT] is nothing we will have to worry about as R and HTTP takes care of this for us.
+
+The list of possible country codes can be found here:
+
+https://countrycode.org/
+
+The country codes may vary slightly from site to site, so if your request constantly fails, double-check that your format of the country codes is correct. These will later on be used for filtering the data to only include a subset of all countries the WHO has information about. This filtering can be done for several variables, such as YEAR and more.
+
+# In practice
+
+For the rest of this tutorial we will be using two specific target codes to request from the WHO website. The internal code for their respective target used when requesting the data is:
+
+- SDGIPV = Proportion of ever-partnered women and girls aged 15-49 years subjected to physical and/or sexual violence by a current or former intimate partner in the previous 12 months (Violence against women)
+
+- RHR_IPV = Intimate partner violence prevalence among ever partnered women (%) (Violence against women)
+
+- SP_DYN_MRBF18 = Proportion of women aged 20-24 years who were married or in a union by age 18 (%) (Maternal and reproductive health)
+
+## Requesting data
+
+Now that we know these we can make a request using the *httr* package, specifically using the GET() function. Athena has a list of possible formats that we can request that the data is delivered in. I choose to request the data in csv as this is easy to work with in R, as well as being space-efficient which can come in handy if you work with big data. *Json* is a common format to receive requested data in, the package 'jsonlite' is a good toolbox to transform the json data to data structures that are more commonly used in R, such as data frames. 
+
+```{r, results=TRUE}
+# GET() sends the request to the API, we specifically choose a few countries and which format (csv) we want the data to be returned in.
+SDGIPV <- GET('http://apps.who.int/gho/athena/api/GHO/SDGIPV?filter=COUNTRY:IND;COUNTRY:MYS;COUNTRY:BGD;COUNTRY:MNG;COUNTRY:NPL;COUNTRY:PHL;COUNTRY:THA;COUNTRY:VNM;COUNTRY:CHN&format=csv')
+
+glimpse(SDGIPV)
+```
+
+> Raw data can be pretty ugly
+
+## Data formatting
+
+We can then process the content of the request into a workable format. using *content()* from the **httr package** we specify what we want to process, and in what format it is. *content()* has three different options based on the format, so you will have to adjust according to the format you requested when you used *GET()*. *'parsed'* is the most flexible option, where you leave R to try and figure out how to parse the information.
+
+```{r, results=TRUE}
+processed_SDGIPV <- content(SDGIPV, 'parsed')
+glimpse(processed_SDGIPV)
+``` 
+This results in a nice data table that we can further work with.
+
+## Data cleaning
+
+```{r}
+# Unique() can be used to see which unique levels a variable takes. 
+unique(processed_SDGIPV$AGEGROUP)
+# We can then remove age groups that overlaps other age groups
+processed_SDGIPV <- subset(processed_SDGIPV, !(processed_SDGIPV$AGEGROUP=="AGE15-49" | processed_SDGIPV$AGEGROUP=="AGE18-49"))
+unique(processed_SDGIPV$AGEGROUP)
+```
+
+This part calculates the *average proportion of ever-partnered women and girls aged 15-49 years grouped by country subjected to physical and/or sexual violence by a current or former intimate partner in the previous 12 months*.
+
+```{r, results=TRUE}
+
+country_data = processed_SDGIPV %>% 
+  group_by(COUNTRY) %>% summarise(DV_avgprop = mean(Numeric))
+
+kable(country_data)
+
+```
+
+This calculates average proportion of ever-partnered women and girls aged 15-49 years by age group subjected to physical and/or sexual violence by a current or former intimate partner in the previous 12 months.
+
+```{r, results=TRUE}
+
+age_data = processed_SDGIPV %>% 
+  group_by(AGEGROUP) %>% summarise(Average = mean(Numeric))
+
+kable(age_data)
+
+```
+
+## Second request 
+
+We can then make a second request, this time we request data for the proportion of women aged 20-24 years who were married or in a union by age 18. We filter like in the previous request so we have the same type of aggregation in the data. 
+
+```{r}
+SP_DYN_MRBF18 <- GET('http://apps.who.int/gho/athena/api/GHO/SP_DYN_MRBF18?filter=COUNTRY:IND;COUNTRY:MYS;COUNTRY:BGD;COUNTRY:MNG;COUNTRY:THA;COUNTRY:NPL;COUNTRY:PHL;COUNTRY:VNM;COUNTRY:CHN&format=csv')
+SP_DYN_MRBF18
+
+# COUNTRY:THA;COUNTRY:NPL;
+```
+
+#### Cleaning {-}
+
+```{r, results=TRUE}
+
+processed_SP_DYN_MRBF18 <- content(SP_DYN_MRBF18, 'parsed')
+names(processed_SP_DYN_MRBF18)[names(processed_SP_DYN_MRBF18) == "Numeric"] <- "ChildMarriage_prop"
+
+glimpse(processed_SP_DYN_MRBF18) 
+```
+
+
+## Analysis
+
+We can merge the two datasets from the two queries at the country level to form a more complete dataset and start analysing the data:
+
+```{r, results=TRUE}
+df <- merge(country_data, processed_SP_DYN_MRBF18,by=c('COUNTRY'))
+glimpse(df)
+```
+
+Visualizing the realtionships of the two variables in a scatter plot yields the following results:
+
+```{r}
+ggplot(df, aes(x=ChildMarriage_prop, y=DV_avgprop, color = COUNTRY)) +
+  geom_point(size = 3) + 
+  theme_bw() +
+  ylab('Proportion of domestic violence') +
+  xlab('Proportion of child marriage (Married under 18)')
+
+```
+
+These two data sets can be merged into one, and can later on be exported or merged with other data to enrich it even further. 
+
+# Helpful resources
+
+For a few of the larger companies there are some specific package that are built to access their specific API. Examples of these are:
+
+Twitter: *rtweet*, *twitteR*
+
+Google: *gargl*, *mapsapi*
+
+Facebook: *Rfacebook*
+
+Youtube: *tuber*
+
+Reddit: *RedditExtractoR*
+
+These libraries are developed to make things easier for requesting information from these specific sources. However, using 'httr' as in this tutorial will get you very far as it is the most common package for scraping information in R.
+
+
+## Further reading and useful resources: 
+
+Excellent source for general knowledge about APIs: 
+**Disclaimer:**: All ressources listed here should not be considered as endorsements of any kind. 
+
+https://zapier.com/learn/apis/
+
+The website for the httr package that we use in this tutorial: 
+
+https://httr.r-lib.org/
+
+A two-part YouTube tutorial on what API's are and how to work with them in R:
+
+https://www.youtube.com/watch?v=zc0ayq-c0OM
+
+Visualization:
+
+https://briatte.github.io/ggnet/
+
+Resources that could be useful to understand this specific example:
+
+https://www.who.int/data/gho/info/gho-odata-api
+https://www.who.int/data/gho/info/athena-api
+https://www.who.int/data/gho/info/athena-api-examples
+https://unstats.un.org/sdgs/indicators/database/
+
