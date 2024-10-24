@@ -1,0 +1,380 @@
+---
+title: "Understanding child marriage using geo-covariates"
+subtitle: "A step-by-step case study with Bangladesh data "
+author: "Christophe Bontemps & Eunkoo Lee"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    code_folding: show
+    highlight: tango
+    number_sections: yes
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set( message = FALSE, warning = FALSE, results =FALSE, echo = TRUE) 
+
+```
+
+* * *
+# Introduction to integrating household survey and geospatial data
+
+We need a minimum of  R packages.
+
+```{r packages}
+# GIS packages
+library(raster) ## for reading "RASTER" files
+library(rgdal)  ## for reading "shapefiles"
+library(sp)     ## for adjusting CRS in 
+
+# Load the survey package
+library(survey)
+
+
+# Tidy data management packages
+library(dplyr)
+library(data.table)
+
+
+# Plotting packages
+library(ggplot2)
+library(RColorBrewer)
+
+# Nice presentation of results
+library(knitr)
+library(papeR)
+```
+
+
+
+# Understanding child marriage using geo-covariates
+
+## The DHS survey
+
+
+```{r}
+# Reading DHS survey data 
+merged1<-read.csv(file = 'Data/bangladesh.csv')  # reading DHS Bangladesh 2014
+merged1$Age<-as.numeric(merged1$Age)
+
+#Computing the proportion of getting married before 15 by cluster
+cluster_average<-aggregate(Before15~DHSCLUST,
+                           data=merged1,
+                           FUN=mean)  
+```
+
+
+## Data and preliminary analysis
+
+Since the previous operation may take time and CPU resources, you can directly load the data sets created above and **start using the code here**
+
+```{r}
+### Loading  Geo-covariate for clusters ## 
+load("CreatedData/accessData.Rda")
+load("CreatedData/smodData.Rda")
+load("CreatedData/buildupData.Rda")
+load("CreatedData/aridityData.Rda")
+load("CreatedData/densityData.Rda")
+load("CreatedData/aWIData.Rda")
+load("CreatedData/aICData.Rda")
+load("CreatedData/aPPData.Rda")
+```
+
+
+
+```{r}
+## Function used for merging geo-covariates to DHS data #
+dhsdataMerge<-function(originalData){
+  datause<-merge(originalData, accessData.agg, by=c("DHSCLUST"), all.x=T)
+  datause<-merge(datause, smodData.agg, by=c("DHSCLUST"), all.x=T)
+  datause<-merge(datause, buildupData.agg, by=c("DHSCLUST"), all.x=T)
+  datause<-merge(datause, aridityData, by=c("DHSCLUST"), all.x=T)  ## NO .agg HERE because already aggregated !!! 
+  datause<-merge(datause, densityData.agg, by=c("DHSCLUST"), all.x=T)
+  datause<-merge(datause, aWIData.agg, by=c("DHSCLUST"), all.x=T)
+  datause<-merge(datause, aICData.agg, by=c("DHSCLUST"), all.x=T)
+  datause<-merge(datause, aPPData.agg, by=c("DHSCLUST"), all.x=T)
+  datause<-datause[datause$DHSCLUST!=544,]
+  return(datause)
+}
+# Using this function, we can merge the file cluster_average
+# with all the Geo-covariate extracted at the cluster level
+data.agg<-dhsdataMerge(cluster_average) 
+```
+The table hereafter provides some links to the resources we have used for this analysis. 
+
+
+|     Geo-covariates      |     Definition                                                                                                                                               |     Data   source link (use Google Chrome)                                                                                                |
+|-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+|     Travel_Times2015    |     Travelling time (in minutes) to the nearest city of   more than 50,000 people                                                                            |     https://doi.org/10.6084/m9.figshare.7638134.v3                                                                                        |
+|     SMOD2015            |     Degree of urbanization                                                                                                                                   |     http://cidportal.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_SMOD_POP_GLOBE_R2016A/                                                    |
+|     Buildup2015         |     Percentage of building footprint area in relation to   the total cell area.                                                                              |     http://cidportal.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_BUILT_LDSMT_GLOBE_R2015B/GHS_BUILT_LDS2014_GLOBE_R2016A_54009_1k/V1-0/    |
+|     Aridity2015         |     Climate data related to evapotranspiration processes   and rainfall deficit for potential vegetative growth. Higher index suggests   higher humidity.    |     https://figshare.com/articles/Global_Aridity_Index_and_Potential_Evapotranspiration_ET0_Climate_Database_v2/7504448/3                 |
+|     Density2015         |     Number of inhabitants per   cell (1km X 1km)                                                                                                             |     http://cidportal.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_POP_GPW4_GLOBE_R2015A/GHS_POP_GPW42015_GLOBE_R2015A_54009_1k/V1-0/        |
+|     aIncome2013         |     Estimates of income in USD   per grid square                                                                                                             |     https://www.worldpop.org/doi/10.5258/SOTON/WP00020                                                                                    |
+|     aPP2013             |     Mean likelihood of living in   poverty per grid square                                                                                                   |     https://www.worldpop.org/doi/10.5258/SOTON/WP00020                                                                                    |
+|     aWealthIndex2011    |     Mean DHS wealth index score   per grid square                                                                                                            |     https://www.worldpop.org/doi/10.5258/SOTON/WP00020                                                                                    |
+
+
+
+
+## Correlation plot between external variables  {-}
+
+
+```{r }
+library(ggcorrplot)
+
+# We compute the correlation matrix of the covariates
+corr_coef<-cor(data.agg[, c(3:10)],use = "p")
+#And then plot it with nice options 
+ggcorrplot(corr_coef, 
+           type = "lower",         # lower triangle of the matrix only
+           hc.order = TRUE,        # variable sorted from highest to lowest
+           outline.col = "white",  #Color options
+           lab = TRUE)
+
+```
+
+# Logistic regression
+
+## Data preparation 
+
+```{r}
+# We use the dhsdataMerge function to merge the survey data (individuals)
+# with all the Geo-covariate extracted at the cluster level
+DataMerged1<-dhsdataMerge(merged1)
+
+# We need to have a factor variable and not directly Before15 (that is numeric here)  
+DataMerged1$I_Before15 <- as.factor(DataMerged1$Before15)
+
+# Education is a factor variable
+DataMerged1$Education <- as.factor(DataMerged1$Education)
+# DataMerged1 <- DataMerged1 %>%                    # defining the reference category
+#   mutate(Education = relevel(Education, "0-No"))
+# 
+
+# We change the unit of Aridity here 
+DataMerged1$Aridity2015 <- DataMerged1$Aridity2015 * 10^8
+
+# Defining the variables of the model
+Y<-"I_Before15"               # Response variable
+XCovars <- c(15, 17, 57:64)   # age+education+GIS
+```
+
+> We can define the formula as a string variable for reusing..
+
+```{r}
+formula_string<- paste(Y, paste(colnames(DataMerged1)[XCovars], collapse=" + "), sep="~")
+print(paste(" Regression formula: ",formula_string))
+
+```
+
+
+## Results
+
+
+```{r, results='asis'}
+# Logistics Regression with the DHS structure
+
+glm.simple.fit <- glm(formula_string, 
+               data = DataMerged1,
+               family = binomial)
+
+
+# Nice printing of the results (using paper and knitr packages)
+pretty_lm2 <- prettify(summary(glm.simple.fit))
+kable(pretty_lm2, digits = 3)
+
+```
+
+
+
+> But, wait,  we need to take into account the specific structure of the DHS survey. 
+
+
+```{r}
+# Convert to correct types
+DataMerged1$DHSCLUST <- as.numeric(DataMerged1$DHSCLUST)
+DataMerged1$V003 <- as.factor(DataMerged1$V003)
+DataMerged1$HV005 <- as.numeric(DataMerged1$HV005)  # If not already numeric
+DataMerged1$HHweights <- DataMerged1$HV005 / 1000000 # Rescale the weights
+
+# Create the survey design object
+DHSdesign <- svydesign(id = ~DHSCLUST,               # Cluster (PSU)
+                    strata = ~V003,           # Stratification
+                    weights = ~HHweights,
+                    data = DataMerged1, 
+                    nest = TRUE)
+```
+
+```{r, results='asis'}
+# Logistics Regression with the DHS structure
+
+glm.fit <- svyglm(formula_string, 
+               data = DataMerged1,
+               design = DHSdesign, 
+               family = binomial)
+
+
+# Nice printing of the results (using paper and knitr packages)
+pretty_lm2 <- prettify(summary(glm.fit))
+kable(pretty_lm2, digits = 3)
+
+```
+
+
+
+## Confusion Matrix and other criterias
+
+```{r, results=TRUE }
+library("regclass")
+cm <- confusion_matrix(glm.fit)
+cm
+```
+```{r}
+# Computing elements from the confusision matrix
+
+TP <- as.numeric(cm[2, 2])  # True Positives
+TN <- as.numeric(cm[1, 1])  # True Negatives
+FP <- as.numeric(cm[1, 2])  # False Positives
+FN <- as.numeric(cm[2, 1])  # False Negatives
+
+# Calculate accuracy
+accuracy <- (TP + TN) / (TP+TN+FP+FN)
+
+# Calculate specificity
+specificity <- TP / (TP + FP)
+
+# Calculate sensitivity
+sensitivity <- TP / (TP + FN)
+
+# Calculate F1-score
+f1_score <- 2 * (specificity * sensitivity) / (specificity + sensitivity)
+```
+
+#### Some definitions 
+Accuracy: (TP + TN) / (TP + TN + FP + FN)
+Specificity : TP / (TP + FP) — proportion of positive predictions that are correct.
+Sensitivity (recall)): TP / (TP + FN) — proportion of actual positives that are correctly predicted.
+
+
+Here, we have for the logit model : 
+
+- `r paste("accuracy =", round(accuracy, 3))`
+- `r paste("specificity = ", round(specificity,3))`
+- `r paste("sensitivity =", round(sensitivity,3))`
+- `r paste("f1_score =",  round(f1_score,3))`
+
+## Visual representation of the logistic model
+
+
+```{r visreg}
+library(visreg)
+library(ggpubr)
+
+# Probabilities of married before 15 wrt 
+p.age <- visreg(glm.fit, "Age", scale="response", rug=0,  # for rugs =2
+       xlab="Age",
+       ylab="P(Before15=1)", gg=TRUE) + 
+  ylim(0,1) +theme_minimal()
+
+p.education <- visreg(glm.fit, "Education", scale="response", rug=0,
+       xlab="Education",
+       ylab="P(Before15=1)", gg=TRUE) + 
+  ylim(0,1) + theme_minimal() + 
+ theme(axis.text.x = element_text(angle = 45,
+                                   vjust = 1,
+                                   hjust=1,
+                                   size=7))
+
+
+p.aridity <- visreg(glm.fit, "Aridity2015", scale="response", rug=0,
+       xlab="Aridity level (2015)",
+       ylab="P(Before15=1)", gg=TRUE) + 
+  ylim(0,1) +theme_minimal()
+
+p.income <- visreg(glm.fit, "aIncome2013", scale="response", rug=0,
+       xlab=" Estimated income (in $ 2013)",
+       ylab="P(Before15=1)", gg=TRUE) + 
+  ylim(0,1) +theme_minimal()
+
+
+figure <- ggarrange( p.age, p.education, p.aridity, p.income,
+                    #labels = c("Edudation", "Age",  "Aridity (2015)", ""),
+                    ncol = 2, nrow = 2)
+figure
+```
+
+
+# Random Forests  
+ 
+ 
+```{r RF, cache = TRUE}
+set.seed(888)               # set random seed so we can reproduce the result
+myRandomForest<-randomForest(as.formula(formula_string),
+                             data = DataMerged1,
+                             importance = TRUE,
+                             maxnodes=25,
+                             ntree=1000,
+                             type="classification",
+                             na.action = na.roughfix)
+```
+
+## Accuracy rate and confusion Matrix 
+
+```{r, results = TRUE}
+myRandomForest
+
+```
+#### 
+```{r}
+cm <- myRandomForest$confusion
+print(cm)
+```
+```{r}
+# Computing elements from the confusision matrix
+
+TP <- as.numeric(cm[2, 2])  # True Positives
+TN <- as.numeric(cm[1, 1])  # True Negatives
+FP <- as.numeric(cm[1, 2])  # False Positives
+FN <- as.numeric(cm[2, 1])  # False Negatives
+
+# Calculate accuracy
+accuracy <- (TP + TN) / (TP+TN+FP+FN)
+
+# Calculate specificity
+specificity <- TP / (TP + FP)
+
+# Calculate sensitivity
+sensitivity <- TP / (TP + FN)
+
+# Calculate F1-score
+f1_score <- 2 * (specificity * sensitivity) / (specificity + sensitivity)
+```
+
+## Results for RF
+
+```{r}
+# Output the results
+paste("accuracy RF =", round(accuracy, 3))
+paste("specificity RF = ", round(specificity,3))
+paste("sensitivity RF =", round(sensitivity,3)) 
+paste("f1_score RF =",  round(f1_score,3))
+```
+
+Here, we have for the RF model : 
+
+- `r paste("accuracy for RF =", round(accuracy, 3))`
+- `r paste("specificity for RF = ", round(specificity,3))`
+- `r paste("sensitivity for RF =", round(sensitivity,3))`
+- `r paste("f1_score for RF =",  round(f1_score,3))`
+
+## Variable importance plot 
+
+```{r}
+varImpPlot(myRandomForest)
+```
+
+
+
