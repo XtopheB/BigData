@@ -4,13 +4,13 @@ subtitle: "A step-by-step case study with Bangladesh data "
 author: "Christophe Bontemps & Eunkoo Lee"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
-  word_document: default
-  pdf_document: default
   html_document:
     code_folding: show
     highlight: tango
     number_sections: yes
     theme: lumen
+  word_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -56,7 +56,7 @@ library(papeR)
 
 ```{r}
 # Reading DHS survey data 
-merged1<-read.csv(file = 'Data/bangladesh.csv')  # reading DHS Bangladesh 2014
+merged1<-read.csv(file = '/CreatedData/bangladesh.csv')  # reading DHS Bangladesh 2014
 merged1$Age<-as.numeric(merged1$Age)
 
 #Computing the proportion of getting married before 15 by cluster
