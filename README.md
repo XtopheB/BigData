@@ -1,6 +1,5 @@
 # BigData
-Exercises and documents for SIAP's Big Data Course
-
+Exercises and documents for SIAP's course on ***Big Data: Innovative Methods and Applications for Achieving SDGs***
 *21-25 October, SIAP, Japan*
 
 > Code and demos created for the course
