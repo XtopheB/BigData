@@ -1,4 +1,4 @@
-# BigData
+# Big Data Pedagogical Materials
 Exercises and documents for SIAP's course on ***Big Data: Innovative Methods and Applications for Achieving SDGs***
 *21-25 October, SIAP, Japan*
 
